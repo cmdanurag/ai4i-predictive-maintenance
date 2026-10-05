@@ -220,6 +220,12 @@ Each step removes one layer of optimism and the score falls at every step. **The
 the one most commonly reported on this dataset, and it is the one that means least** — it overstates
 deployable performance by 0.08 PR-AUC.
 
+> **A note on the 0.906 figures above.** The three leakage comparisons use a lighter forest
+> (200 trees, default leaf size) so that each leaked/honest pair is internally like-for-like and
+> cheap to re-run. The headline model in §8 is the 300-tree forest, which scores 0.909 on the same
+> test set. The leakage *conclusions* are unaffected — the gaps, not the absolute values, are the
+> point.
+
 ### Why `cycle` is excluded as a feature
 
 Related to (b). **Every training engine runs to failure**, so within the training data a large cycle
