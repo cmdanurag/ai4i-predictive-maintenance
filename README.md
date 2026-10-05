@@ -26,7 +26,8 @@ failure label and five failure-mode flags. **The dataset is synthetic.**
 4. **Models.** Logistic regression, then random forest, on the six audited features.
 5. **Validation.** Stratified 60/20/20 fit/validation/test split. Threshold selected on the
    validation slice only; test set evaluated once. 5-fold CV for the spread.
-6. **Benchmark against a hand-written rule** reconstructed from the data.
+6. **Benchmark against a hand-written rule** built from the generation thresholds published with
+   the dataset, after verifying that they reproduce the failure-mode labels exactly.
 
 ## Results (test set, 2,000 rows, 68 failures)
 
@@ -38,7 +39,13 @@ failure label and five failure-mode flags. **The dataset is synthetic.**
 | Random forest (tuned, 0.267) | 0.445 | 0.838 | 0.582 | 0.713 |
 | **Hand-written rule** | **1.000** | **0.838** | **0.912** | **0.866** |
 
-Cross-validated F2: logistic regression 0.408 ± 0.022, random forest 0.675 ± 0.036.
+PR-AUC (average precision) on test, against a 0.034 floor: logistic regression 0.393, random
+forest 0.726. Cross-validated F2: 0.408 ± 0.022 and 0.675 ± 0.036; cross-validated PR-AUC:
+0.441 ± 0.030 and 0.751 ± 0.041.
+
+As a *ranker* the forest separates risk cleanly even though it loses to the rule as a classifier:
+banding its probabilities gives failure rates of 0.3% / 5.6% / 26.8% / 76.1% across four risk
+bands, and the top 20 machines on the ranked worklist are all genuine failures.
 
 Lowering the threshold from 0.5 to 0.267 raised recall from 0.647 to 0.838: 57 of 68 failures
 caught instead of 44, at the cost of 71 unnecessary inspections.
@@ -74,3 +81,8 @@ python -m venv .venv
 pip install -r requirements.txt
 jupyter lab notebooks/ai4i_01.ipynb
 ```
+
+## Project report
+
+[`PROJECT_REPORT.md`](PROJECT_REPORT.md) — full write-up: problem framing, scope (including what
+this does *not* do and why), method, results, monitoring view, limitations and roadmap.
