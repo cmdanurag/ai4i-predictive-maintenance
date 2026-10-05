@@ -275,8 +275,10 @@ apparent edge is not established by this data. That is a finding, not a disappoi
 signal is mostly a smooth drift in the rolling means, which a linear model on well-chosen features
 captures nearly as well as a forest does.
 
-The forest is carried forward because it holds a modest but consistent advantage on the truly
-held-out test engines (0.909 vs 0.882) and needs no feature scaling in deployment.
+The forest is carried forward on the **validation engines**, where it leads 0.971 to 0.961 — a
+choice made before the test set was touched. It also needs no feature scaling in deployment. Its
+test-set margin (0.909 to 0.882, §8) is a *result* of that choice, not the reason for it: selecting
+a model on test performance would contaminate the very estimate this project claims is clean.
 
 ### Where the signal lives
 

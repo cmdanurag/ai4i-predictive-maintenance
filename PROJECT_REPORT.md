@@ -24,7 +24,7 @@ a predictive maintenance model has to be built around.
 
 **The task as implemented:** given a snapshot of sensor readings from a machine (air temperature,
 process temperature, rotational speed, torque, tool wear) plus its product quality grade, classify
-whether the machine is in a failure state, emit a calibrated failure probability, and convert that
+whether the machine is in a failure state, emit a failure probability, and convert that
 probability into a ranked maintenance worklist with an explicit alert threshold.
 
 **The user of the output:** a maintenance planner who holds a fixed-interval preventive schedule

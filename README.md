@@ -1,100 +1,129 @@
-# Predictive Maintenance on the AI4I 2020 Dataset
+# Predictive Maintenance for Industrial Equipment
 
-Binary classification of machine failure from sensor snapshots, with the metric and decision
-threshold derived from the cost of a missed failure versus an unnecessary inspection — and a
-direct test of whether the model has learned anything a hand-written rule could not.
+**Project submission — Sumanta Biswas**
 
-**Notebook:** [`notebooks/ai4i_01.ipynb`](notebooks/ai4i_01.ipynb)
+> Predict whether a machine is likely to fail within a future time window using sensor readings and
+> maintenance history.
 
-## Data
+Two models, built in sequence on two public datasets. The second is the primary deliverable; the
+first is the work that motivated it, and it supplies the honesty check that makes the second
+interpretable.
 
-[AI4I 2020 Predictive Maintenance Dataset](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset)
-(Matzka, 2020), UCI Machine Learning Repository, CC BY 4.0. 10,000 rows: air and process
-temperature, rotational speed, torque, tool wear and product quality grade, with a machine
-failure label and five failure-mode flags. **The dataset is synthetic.**
+| | Primary — **forecast window** | Supporting — **snapshot** |
+|---|---|---|
+| Question | fails within the next 30 cycles? | failing right now? |
+| Data | NASA C-MAPSS FD001, 100 run-to-failure engines | AI4I 2020, 10,000 independent readings |
+| Headline | **PR-AUC 0.909** (floor 0.026) · 25/25 at-risk engines caught · **33 cycles median warning** | PR-AUC 0.726 (floor 0.034) · F2 0.713 |
+| Read | **[forecast_window/](forecast_window/)** · [report](forecast_window/PROJECT_REPORT.md) · [notebook](forecast_window/notebooks/cmapss_forecast_window.ipynb) | [report](PROJECT_REPORT.md) · [notebook](notebooks/ai4i_01.ipynb) |
 
-## Method
+---
 
-1. **Column audit.** Every column assigned a role before modelling. `UDI` and `Product ID` are
-   identifiers (memorisation risk — and `Product ID`'s first character duplicates `Type`).
-   The five failure-mode flags are components of the label, so using them is target leakage:
-   a tree trained on them scores F1 0.985 and has learned nothing.
-2. **Baseline.** 3.39% failure rate. Predicting "no failure" everywhere is 96.6% accurate with
-   zero recall — accuracy is the wrong instrument.
-3. **Metric chosen before modelling.** A missed failure costs far more than an unnecessary
-   inspection, so F2 (recall-weighted) rather than accuracy or F1.
-4. **Models.** Logistic regression, then random forest, on the six audited features.
-5. **Validation.** Stratified 60/20/20 fit/validation/test split. Threshold selected on the
-   validation slice only; test set evaluated once. 5-fold CV for the spread.
-6. **Benchmark against a hand-written rule** built from the generation thresholds published with
-   the dataset, after verifying that they reproduce the failure-mode labels exactly.
+## How this maps to the brief
 
-## Results (test set, 2,000 rows, 68 failures)
+Every number below is produced by a cell in the linked notebook, which runs top to bottom from a
+restarted kernel with no errors.
 
-| Model | Precision | Recall | F1 | F2 |
-|---|---|---|---|---|
-| Majority baseline | 0.000 | 0.000 | 0.000 | 0.000 |
-| Logistic regression (0.5) | 0.147 | 0.824 | 0.249 | 0.428 |
-| Random forest (0.5) | 0.647 | 0.647 | 0.647 | 0.647 |
-| Random forest (tuned, 0.267) | 0.445 | 0.838 | 0.582 | 0.713 |
-| **Hand-written rule** | **1.000** | **0.838** | **0.912** | **0.866** |
+| # | Required step | Where | Result |
+|---|---|---|---|
+| 1 | Collect timestamped sensor data (temperature, pressure, operating hours) | [forecast_window](forecast_window/PROJECT_REPORT.md) §2 | 100 engines × per-cycle records; 21 sensors + 3 operating settings; 20,631 train / 13,096 test rows. 7 constant channels dropped at audit. |
+| 2 | Rolling statistics and lag features, **avoiding future-data leakage** | [forecast_window](forecast_window/PROJECT_REPORT.md) §4–5 | 136 features: trailing rolling mean/sd (windows 5 and 20), 1- and 5-cycle differences, drift from first reading. `groupby` before `rolling` so no window crosses an engine; trailing only so none reaches forward — **asserted in code**, not assumed. **Three leakage modes built deliberately and scored.** |
+| 3 | Define a failure prediction window and label each observation | [forecast_window](forecast_window/PROJECT_REPORT.md) §3 | `y = 1` if remaining useful life ≤ **30 cycles**. H justified as a maintenance-planning decision; prevalence reported at H = 10/20/30/50. |
+| 4 | Train classification models; handle rare failures with sampling/weights | [forecast_window](forecast_window/PROJECT_REPORT.md) §7 | Logistic regression and random forest, `class_weight='balanced'`. Resampling rejected with a reason: SMOTE would interpolate across engines at different degradation stages. |
+| 5 | Evaluate recall, precision, **PR-AUC**, and false alarms | [forecast_window](forecast_window/PROJECT_REPORT.md) §8 | Precision 0.691 · recall 0.937 · F2 0.875 · **PR-AUC 0.909** against a 0.026 floor. 139 false alarms = **11.0 per 1,000 observations screened**. Benchmarked against age-based scheduling, which loses 0.875 to 0.385. |
+| 6 | Monitoring view with risk scores; alerts for high-risk equipment | [forecast_window](forecast_window/PROJECT_REPORT.md) §9–10 | Per-engine risk trajectories, four alert bands, ranked shift worklist. **Alert lead time** measured per engine: median 33 cycles of warning, every at-risk engine flagged. |
 
-PR-AUC (average precision) on test, against a 0.034 floor: logistic regression 0.393, random
-forest 0.726. Cross-validated F2: 0.408 ± 0.022 and 0.675 ± 0.036; cross-validated PR-AUC:
-0.441 ± 0.030 and 0.751 ± 0.041.
+The supporting AI4I project covers steps 4–6 only. AI4I has **no timestamp column**, so steps 1–3
+are undefined on it — building lag features over its row index would have invented an ordering the
+data does not have. That constraint is what led to adopting C-MAPSS, and it is documented rather
+than worked around ([PROJECT_REPORT.md](PROJECT_REPORT.md) §2).
 
-As a *ranker* the forest separates risk cleanly even though it loses to the rule as a classifier:
-banding its probabilities gives failure rates of 0.3% / 5.6% / 26.8% / 76.1% across four risk
-bands, and the top 20 machines on the ranked worklist are all genuine failures.
+---
 
-Lowering the threshold from 0.5 to 0.267 raised recall from 0.647 to 0.838: 57 of 68 failures
-caught instead of 44, at the cost of 71 unnecessary inspections.
+## Three results worth reading the reports for
 
-## Limitation
+### 1. The benchmark decides whether a model is worth deploying — and it has to be run first
 
-**A three-line rule with no training outperforms the model.** The heat-dissipation, power and
-overstrain failure modes are each reproduced exactly (100% of rows) by simple thresholds on
-temperature difference, mechanical power and tool wear × torque — because those thresholds
-generated the labels. The rule's recall stops at 0.838 only because tool-wear failure is random
-within a wear window.
+The two projects reach opposite verdicts, which is why both are included:
 
-So the model's score is not evidence of predictive skill, and a high F1 on this dataset means
-little on its own. The value here is the pipeline: the audit, leakage control, a cost-derived
-metric, a threshold chosen off the test set, and a benchmark against a trivial alternative.
+| Project | Trivial alternative | Outcome |
+|---|---|---|
+| AI4I snapshot | a three-line hand-written rule | **the rule wins** — F2 0.866 vs 0.713 |
+| C-MAPSS forecast window | age-based preventive scheduling | **the model wins** — F2 0.875 vs 0.385 |
 
-Real breakdown records would differ in ways that matter more than the model: retrospective
-work orders instead of sensor streams, free-text fault descriptions, inconsistent equipment
-naming, missing downtime entries, far fewer failure events, and time ordering — which would
-make k-fold invalid and require rolling-origin validation.
+AI4I's labels were generated by threshold rules, so a rule written by hand with no training
+reproduces three of its four failure modes on 100% of rows and beats the tuned model. Reporting that
+model's F1 without the check would have been misleading. On C-MAPSS the trivial alternative — what
+plants actually do, schedule by running hours — loses decisively, so there the model earns its place.
 
-## Next steps
+### 2. Leakage does not announce itself as an implausibly high score
 
-- Apply the pipeline to real, time-ordered breakdown records with rolling-origin validation
-- Move from failure classification to remaining-useful-life estimation (NASA C-MAPSS)
-- Replace the fixed threshold with expected-cost minimisation using real downtime and inspection costs
+Of three leakage modes built on purpose, the instructive one is a "fraction of life consumed"
+feature. It **improves validation** (PR-AUC 0.975 vs 0.971) and **degrades deployment** (0.888 vs
+0.906), because on truncated engines its denominator means something different than it did in
+training. The common heuristic — *a leak shows up as a suspiciously good score* — would have missed
+it entirely.
+
+A third mode is the one most often reported on this dataset: splitting rows at random instead of by
+engine puts all 100 engines on both sides of the split and overstates deployable performance by 0.08
+PR-AUC.
+
+### 3. Row-level false positives overstate the operational cost
+
+Row-level, the forecast model raises 139 false alarms. Engine-level it raises 4 — and read
+individually, **3 of those 4 were genuinely degrading** (37, 34 and 38 cycles of life remaining),
+flagged just before the 30-cycle window opened. A confusion matrix counts them as errors; a
+maintenance planner would not.
+
+---
+
+## Honest limitations
+
+Both datasets are **simulated**, and neither report claims otherwise. C-MAPSS is physics-based —
+output from a NASA engine model, which a hand-written rule cannot recover — but degradation is still
+smoother than reality, FD001 is the easiest of four subsets (one fault mode, one operating
+condition), and the data contains no maintenance actions, so remaining life is monotone where real
+histories are not. Probabilities rank well but are **not calibrated**. Cost asymmetry is asserted as
+a direction, not measured as a ratio, so the threshold is defensible in direction but not optimal in
+value.
+
+Full lists: [forecast_window §11](forecast_window/PROJECT_REPORT.md) ·
+[AI4I §11](PROJECT_REPORT.md)
+
+---
+
+## Repository
+
+```
+├── forecast_window/            PRIMARY — forecast-window model on NASA C-MAPSS
+│   ├── notebooks/cmapss_forecast_window.ipynb
+│   ├── data/                   FD001 train / test / RUL
+│   ├── PROJECT_REPORT.md
+│   └── README.md
+├── notebooks/ai4i_01.ipynb     SUPPORTING — snapshot classifier on AI4I 2020
+├── data/ai4i2020.csv
+├── PROJECT_REPORT.md
+├── CHECKPOINTS.md              build log for the AI4I project
+└── requirements.txt
+```
 
 ## Run
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate        # Windows; use source .venv/bin/activate elsewhere
+.venv/Scripts/activate            # Windows; source .venv/bin/activate elsewhere
 pip install -r requirements.txt
-jupyter lab notebooks/ai4i_01.ipynb
+
+jupyter lab forecast_window/notebooks/cmapss_forecast_window.ipynb   # primary
+jupyter lab notebooks/ai4i_01.ipynb                                  # supporting
 ```
 
-## Project report
+Both notebooks run top to bottom from a restarted kernel with no errors. All random seeds fixed
+at 42.
 
-[`PROJECT_REPORT.md`](PROJECT_REPORT.md) — full write-up: problem framing, scope (including what
-this does *not* do and why), method, results, monitoring view, limitations and roadmap.
+## Data provenance
 
-## Companion project: forecast-window formulation
-
-[`forecast_window/`](forecast_window/) applies the same discipline to the question this dataset
-cannot answer — *will the machine fail within the next 30 cycles?* — using NASA C-MAPSS
-run-to-failure data, which has the per-machine time ordering AI4I lacks. Rolling and lag features,
-engine-grouped validation, three leakage demonstrations, and alert lead time.
-
-Its headline inverts this one: there the trivial benchmark (age-based scheduling) **loses** to the
-model, PR-AUC 0.909 against 0.210. The pair is the point — one project shows how to establish that a
-good score means nothing, the other shows the same checks applied where the score turns out to be
-real.
+- **NASA C-MAPSS FD001** — Saxena, A. & Goebel, K. (2008), NASA Ames Prognostics Data Repository.
+  Downloaded from public mirrors and verified byte-identical across two independent sources
+  (`train_FD001.txt` MD5 `259f340bac32ce6fa8894815600fa757`).
+- **AI4I 2020** — Matzka, S. (2020), UCI Machine Learning Repository, CC BY 4.0.
+  [doi:10.24432/C5HS5C](https://doi.org/10.24432/C5HS5C)

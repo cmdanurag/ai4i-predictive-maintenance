@@ -43,8 +43,9 @@ truncated at random healthy points, making them a fleet at mixed ages (13,096 ro
 | **Random forest** | **0.691** | **0.937** | **0.795** | **0.875** | **0.909** |
 
 PR-AUC floor is 0.026. Engine-grouped 5-fold CV: logistic regression 0.969 ± 0.007, random forest
-0.971 ± 0.005 — **tied**, so the forest's edge is not established by cross-validation; it is carried
-forward on its test-set margin and because it needs no scaling.
+0.971 ± 0.005 — **tied**, so the forest's edge is not established by cross-validation. It is carried
+forward on the validation engines (0.971 vs 0.961, chosen before the test set was touched) and
+because it needs no scaling.
 
 **The model beats age-based scheduling decisively** (F2 0.875 vs 0.385). That comparison, not the
 absolute score, is the argument for building it — and it is the opposite of the parent project's
