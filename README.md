@@ -86,3 +86,15 @@ jupyter lab notebooks/ai4i_01.ipynb
 
 [`PROJECT_REPORT.md`](PROJECT_REPORT.md) — full write-up: problem framing, scope (including what
 this does *not* do and why), method, results, monitoring view, limitations and roadmap.
+
+## Companion project: forecast-window formulation
+
+[`forecast_window/`](forecast_window/) applies the same discipline to the question this dataset
+cannot answer — *will the machine fail within the next 30 cycles?* — using NASA C-MAPSS
+run-to-failure data, which has the per-machine time ordering AI4I lacks. Rolling and lag features,
+engine-grouped validation, three leakage demonstrations, and alert lead time.
+
+Its headline inverts this one: there the trivial benchmark (age-based scheduling) **loses** to the
+model, PR-AUC 0.909 against 0.210. The pair is the point — one project shows how to establish that a
+good score means nothing, the other shows the same checks applied where the score turns out to be
+real.
